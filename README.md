@@ -7,15 +7,17 @@
 
 ---
 
+## Project Overview
+The goal is to create an interactive "Simon Says" game where a Meccanoid 2.0 robot performs poses, and a player, whose movements are tracked via webcam and pose estimation, attempts to mimic those poses. The game will feature audiovisual feedback on a TV. Control will be via the Meccanoid's native brain using Python.
+
+---
+
 ## 🌟 Features
 
-* **Robotic Posing:** Watch the Meccanoid robot strike a variety of pre-programmed poses.
-* **Real-Time Human Pose Estimation:** Uses a webcam and computer vision to detect the player's body pose.
-* **"Simon Says" Game Logic:** The classic game meets modern tech – match the robot's sequence of moves!
-* **Interactive Feedback:** Instant visual and audio cues on a TV screen to indicate correct or incorrect poses.
-* **Engaging Gameplay:** Fun for kids and adults alike, encouraging physical movement and quick thinking.
-* **Leverages Onboard Meccanoid Brain:** Interacts directly with the Meccanoid's existing control module via its standard communication protocol, ensuring authentic robot movement and utilizing its built-in servo control.
-* **Extensible:** Designed with Python, allowing for new poses, features, and game modes to be added.
+- Real-time human pose estimation via webcam.
+- Bluetooth LE control of a Meccanoid 2.0 robot.
+- "Simon Says" style gameplay.
+- Audiovisual feedback.
 
 ---
 
@@ -32,11 +34,11 @@
 
 ## 🛠️ Technology Stack (High-Level)
 
-* **Core Language:** Python
-* **Human Pose Estimation:** \[e.g., MediaPipe with MoveNet, TensorFlow Lite with PoseNet - *Specify your choice*]
-* **Robot Control:** Custom Python scripts that communicate with the Meccanoid robot's **onboard brain** via Bluetooth LE. This involves sending commands based on the robot's native communication protocol (e.g., using a modified version of the `pymecca` library or a custom implementation with `bleak`).
-* **Game Logic & Audiovisuals:** \[e.g., Pygame for graphics and sound output to TV - *Specify your choice*]
-* **Operating System:** Developed on Linux (Pop!\_OS 22.04), intended for portability to other Linux systems including Raspberry Pi 4.
+- Python 3.x
+- `bleak` (Bluetooth LE)
+- `mediapipe` (Pose Estimation)
+- `pygame` (Audiovisual)
+- `opencv-python` (Webcam/Image Processing)
 
 ---
 
@@ -88,6 +90,14 @@
 
 ---
 
+## Setup
+Instructions to be added for:
+- Python environment setup (`venv`).
+- Installing dependencies from `requirements.txt`.
+- Bluetooth device configuration (if needed).
+
+---
+
 ## ▶️ How to Run
 
 *(This section will be updated with specific instructions.)*
@@ -100,6 +110,31 @@
     ```bash
     python main_game.py # Or your main script name
     ```
+
+---
+
+## Project Structure
+```
+Meccanoid-Motion-Match/
+├── .venv/
+├── .git/
+├── .github/
+│   └── copilot-instructions.md
+├── src/
+│   ├── __init__.py
+│   ├── robot_control.py
+│   ├── pose_estimation.py
+│   ├── game_logic.py
+│   └── main.py
+├── assets/
+│   ├── sounds/
+│   └── images/
+├── tests/
+├── .gitignore
+├── README.md
+├── requirements.txt
+└── ai-tasks.md
+```
 
 ---
 
