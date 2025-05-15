@@ -7,10 +7,17 @@ MECCANOID_SERVICE_UUID = "0000ffe5-0000-1000-8000-00805f9b34fb"
 # (Vendor specific characteristic for sending commands)
 MECCANOID_CHAR_UUID = "0000ffe9-0000-1000-8000-00805f9b34fb"
 
-# Servo ID mapping and reversal (0-indexed)
-# Based on pymecca and protocol document
-# Servos that need their position value inverted (0xFF - value) if not center (0x80)
-REVERSED_SERVO_INDICES = [1, 3] # Typically RIGHT_ELBOW_SERVO, LEFT_SHOULDER_SERVO
+# Servo ID mapping for the Meccanoid robot, based on extensive testing:
+# According to the Meccanoid Protocol Documentation:
+# Physical Servo 0: Unknown/T-Pose
+# Physical Servo 1: Right Elbow
+# Physical Servo 2: Right Shoulder 
+# Physical Servo 3: Left Shoulder
+# Physical Servo 4: Left Elbow
+# Physical Servos 5-7: No observed function
+
+# Default position for unused servos or center position
+DEFAULT_SERVO_POS = 0x80 # 128 - Neutral/center position (standard for all servos)
 
 def calculate_checksum(payload_18_bytes):
     """
@@ -27,18 +34,44 @@ class RobotControl:
     Handles Bluetooth LE connection and command sending to the Meccanoid robot,
     adhering to the 20-byte packet structure (18-byte payload + 2-byte checksum).
     """
+    # Define poses: [L.Shoulder(0), L.Elbow(1), R.Shoulder(2), R.Elbow(3)]
+    # Values are 0-255 (0x00-0xFF). DEFAULT_SERVO_POS (0x80/128) is center.
+    # Standard range positions:
+    # - 0x40 (64): Minimum position
+    # - 0x80 (128): Center/neutral position
+    # - 0xC0 (192): Maximum position
+    #
+    # Directional Reference from protocol documentation:
+    # - Left Shoulder: 0x40 (Up), 0x80 (Center), 0xC0 (Down)
+    # - Left Elbow: 0x40 (In/Bent), 0x80 (Center), 0xC0 (Out/Extended)
+    # - Right Shoulder: 0x40 (Down), 0x80 (Center), 0xC0 (Up)
+    # - Right Elbow: 0x40 (Out/Extended), 0x80 (Center), 0xC0 (In/Bent)
+    POSES = {
+        "Neutral":          [0x80, 0x80, 0x80, 0x80], # All servos at neutral/center position
+        "T_Pose":           [0x80, 0xC0, 0x80, 0x40], # Arms extended straight out to the sides (T-Pose)
+        "Arms_Up":          [0x40, 0x80, 0xC0, 0x80], # Both shoulders raised, elbows straight
+        "Arms_Down":        [0xC0, 0x80, 0x40, 0x80], # Both shoulders lowered, elbows straight
+        "Right_Wave_High":  [0x80, 0x80, 0xC0, 0xC0], # R.Shoulder up, R.Elbow bent in
+        "Right_Wave_Mid":   [0x80, 0x80, 0xC0, 0x80], # R.Shoulder up, R.Elbow straight
+        "Left_Wave_High":   [0x40, 0x40, 0x80, 0x80], # L.Shoulder up, L.Elbow bent in
+        "Left_Wave_Mid":    [0x40, 0x80, 0x80, 0x80], # L.Shoulder up, L.Elbow straight
+        "Surrender":        [0x40, 0x40, 0xC0, 0xC0], # Both arms up, elbows bent in
+        "Hug_Open":         [0x60, 0xC0, 0xA0, 0x40], # Arms somewhat forward, ready for hug
+        "Hug_Close":        [0x60, 0x40, 0xA0, 0xC0], # Arms forward and bent in (hugging)
+    }
+
     def __init__(self, device_address):
         self.device_address = device_address
         self.client = None
 
         # Initialize robot state
-        # Servos: 8 servos, default to center position (0x80)
-        self.servo_positions = [0x80] * 8
-        # Servo LED modes: 8 servo LEDs, default mode 0x01 (normal operation) or 0x04 (pymecca default for color)
-        self.servo_led_modes = [0x04] * 8 # Using 0x04 as per pymecca for set servo lights
+        # Servos: 8 servos, default to center position (DEFAULT_SERVO_POS)
+        self.servo_positions = [DEFAULT_SERVO_POS] * 8
+        # Servo LED modes: 8 servo LEDs, default mode 0x01 (normal operation)
+        self.servo_led_modes = [0x01] * 8 # Using 0x01 as per protocol for normal operation
         # Servo LED colors: 8 servo LEDs, default to 0x00 (Off)
         self.servo_led_colors = [0x00] * 8
-        # Foot LEDs: Default to 0x01 (pymecca initialization)
+        # Foot LEDs: Default to 0x01 (standard initialization)
         self.foot_leds_byte = 0x01 # This is a single byte in the servo command
         
         # Chest LEDs: 4 LEDs, default to 0x00 (Off)
@@ -92,35 +125,49 @@ class RobotControl:
             bool: True if the command was sent successfully, False otherwise.
         """
         if not self.client or not self.client.is_connected:
-            print("Not connected to Meccanoid. Cannot send command.")
+            print("ERROR: Robot not connected. Cannot send command.")
             return False
 
         if len(command_payload_18_bytes) != 18:
-            print(f"Error: Command payload must be 18 bytes long, got {len(command_payload_18_bytes)} bytes.")
+            print(f"ERROR: Command payload must be 18 bytes long, got {len(command_payload_18_bytes)} bytes. Payload: {command_payload_18_bytes}")
             return False
 
         try:
+            # Ensure all payload elements are integers before checksum and bytes conversion
+            for i, val in enumerate(command_payload_18_bytes):
+                if not isinstance(val, int):
+                    print(f"ERROR: Payload element at index {i} is not an integer: {val} (type: {type(val)})")
+                    return False
+                if not (0 <= val <= 255):
+                    print(f"ERROR: Payload element at index {i} is out of byte range (0-255): {val}")
+            
             checksum_bytes = calculate_checksum(command_payload_18_bytes)
             full_message_20_bytes = bytes(command_payload_18_bytes + checksum_bytes)
             
-            print(f"Sending command ({len(full_message_20_bytes)} bytes): {full_message_20_bytes.hex().upper()}")
+            print(f"DEBUG: Sending command ({len(full_message_20_bytes)} bytes): {full_message_20_bytes.hex().upper()}")
             await self.client.write_gatt_char(MECCANOID_CHAR_UUID, full_message_20_bytes, response=False)
             return True
         except BleakError as e:
-            print(f"BleakError sending command: {e}")
+            print(f"ERROR: BleakError sending command: {e}")
+            import traceback
+            traceback.print_exc()
             return False
-        except ValueError as e: # Catch checksum calculation errors
-            print(f"ValueError: {e}")
+        except ValueError as e: 
+            print(f"ERROR: ValueError sending command (checksum or bytes conversion): {e}")
+            import traceback
+            traceback.print_exc()
             return False
         except Exception as e:
-            print(f"An unexpected error occurred sending command: {e}")
+            print(f"ERROR: Unexpected error in send_command: {type(e).__name__} - {str(e)}")
+            import traceback
+            traceback.print_exc()
             return False
 
     async def initialize_robot(self):
         """
         Sends the wake/handshake command to the robot.
         """
-        print("Sending Wake/Handshake command...")
+        print("Sending Wake/Handshake command (0x0D)...")
         # Payload from docs: [0x0d, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
         handshake_payload = [
             0x0d, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 
@@ -136,7 +183,8 @@ class RobotControl:
 
         Args:
             servo_index (int): The index of the servo (0-7).
-            position (int): The target position (0-255). 0x80 is typically center.
+            position (int): The position value to send (0-255). DEFAULT_SERVO_POS (128) is center.
+                            Based on protocol: 0x40 (min), 0x80 (center), 0xC0 (max).
         """
         if not (0 <= servo_index <= 7):
             print(f"Invalid servo index: {servo_index}. Must be 0-7.")
@@ -145,30 +193,26 @@ class RobotControl:
             print(f"Invalid servo position: {position}. Must be 0-255.")
             return False
 
-        actual_position = position
-        if servo_index in REVERSED_SERVO_INDICES and position != 0x80:
-            actual_position = 0xFF - position
-            print(f"Servo {servo_index} is reversed. Original pos: {position}, Sent pos: {actual_position}")
-        
-        self.servo_positions[servo_index] = actual_position
+        self.servo_positions[servo_index] = position
         
         # Construct the full 18-byte payload for command 0x08
         # [0x08, S0_pos...S7_pos, L0_mode...L7_mode, Foot_LEDs]
         payload = [0x08] + self.servo_positions + self.servo_led_modes + [self.foot_leds_byte]
         
-        print(f"Setting servo {servo_index} to position {position} (sent as {actual_position}). Full servo payload: {payload}")
+        print(f"Setting servo {servo_index} to position {position}. Full servo payload: {payload}")
         return await self.send_command(payload)
 
-    async def set_all_servos_raw(self, positions_8_bytes, led_modes_8_bytes=None, foot_leds_byte=None):
+    async def set_all_servos_raw(self, positions_8_bytes_final, led_modes_8_bytes=None, foot_leds_byte=None):
         """
         Advanced: Sets all servo positions, LED modes, and foot LEDs with raw byte arrays.
-        Useful for defining full poses quickly.
+        The `positions_8_bytes_final` should contain the values exactly as they need to be sent
+        to the robot (i.e., already reversed if necessary by the calling function).
         """
-        if len(positions_8_bytes) != 8:
-            print("Error: positions_8_bytes must be a list of 8 values.")
+        if len(positions_8_bytes_final) != 8:
+            print("Error: positions_8_bytes_final must be a list of 8 values.")
             return False
         
-        self.servo_positions = list(positions_8_bytes) # Ensure it's a list and copy
+        self.servo_positions = list(positions_8_bytes_final)
 
         if led_modes_8_bytes is not None:
             if len(led_modes_8_bytes) != 8:
@@ -180,32 +224,117 @@ class RobotControl:
             self.foot_leds_byte = foot_leds_byte
 
         payload = [0x08] + self.servo_positions + self.servo_led_modes + [self.foot_leds_byte]
-        print(f"Setting all servos raw. Payload: {payload}")
+        print(f"Setting all servos raw. Final payload to send: {payload}")
         return await self.send_command(payload)
+
+    async def execute_pose(self, pose_name):
+        """
+        Executes a predefined pose by name.
+        Maps the logical [LSh, LEl, RSh, REl] pose values to their respective
+        physical servo indices [3, 4, 2, 1].
+        Remaining servos default to DEFAULT_SERVO_POS.
+        """
+        if pose_name not in self.POSES:
+            print(f"Error: Pose '{pose_name}' not defined.")
+            return False
+
+        arm_servo_targets = self.POSES[pose_name]
+        if len(arm_servo_targets) != 4:
+            print(f"Error: Pose definition for '{pose_name}' should have 4 servo values for the arms.")
+            return False
+
+        # Initialize all servos to neutral position
+        final_positions_to_send = [DEFAULT_SERVO_POS] * 8
+
+        print(f"Executing pose: {pose_name} with arm targets {arm_servo_targets}")
+
+        # Map logical pose array [LSh, LEl, RSh, REl] to physical servo indices [3, 4, 2, 1]
+        servo_mapping = {
+            0: 3,  # Left Shoulder -> Physical Servo 3
+            1: 4,  # Left Elbow -> Physical Servo 4
+            2: 2,  # Right Shoulder -> Physical Servo 2
+            3: 1,  # Right Elbow -> Physical Servo 1
+        }
+        
+        for logical_idx, target_pos in enumerate(arm_servo_targets):
+            if not (0 <= target_pos <= 255):
+                print(f"Warning: Servo target {target_pos} for servo {logical_idx} in pose '{pose_name}' is out of 0-255 range. Sending as is.")
+            
+            physical_idx = servo_mapping[logical_idx]
+            final_positions_to_send[physical_idx] = target_pos
+            
+            print(f"  Setting physical servo {physical_idx} (logical {logical_idx}) to position: {target_pos}")
+        
+        print(f"  Final 8 servo positions to send: {final_positions_to_send}")
+        
+        return await self.set_all_servos_raw(final_positions_to_send, self.servo_led_modes, self.foot_leds_byte)
 
     async def set_eye_color(self, r, g, b):
         """
-        Sets the color of the Meccanoid's eyes.
-        Args:
-            r, g, b (int): Red, Green, Blue components, each 0-7.
-        """
-        if not (0 <= r <= 7 and 0 <= g <= 7 and 0 <= b <= 7):
-            print("Invalid RGB values for eyes. Must be 0-7 for each component.")
-            return False
-        
-        self.eye_r, self.eye_g, self.eye_b = r, g, b
-        
-        # Payload: [0x11, 0x00, 0x00, (G << 3) | R, B, 0x00, ..., 0x00] (18 bytes)
-        payload = [0x00] * 18
-        payload[0] = 0x11
-        # payload[1] = 0x00 (already set)
-        # payload[2] = 0x00 (already set)
-        payload[3] = (g << 3) | r
-        payload[4] = b
-        # Remaining bytes (5-17) are 0x00
+        Sets the eye color of the Meccanoid using command 0x11.
+        Also sets chest LEDs according to their current status, as command 0x11 handles both.
 
-        print(f"Setting eye color to R:{r} G:{g} B:{b}. Payload: {payload}")
-        return await self.send_command(payload)
+        Args:
+            r (int): Red component (0-7).
+            g (int): Green component (0-7).
+            b (int): Blue component (0-7).
+        """
+        print(f"DEBUG: set_eye_color called with r={r}, g={g}, b={b}")
+        if not all(isinstance(val, int) and 0 <= val <= 7 for val in [r, g, b]):
+            print(f"ERROR: Invalid RGB values. r,g,b must be integers between 0 and 7. Got: r={r}({type(r)}), g={g}({type(g)}), b={b}({type(b)})")
+            return False
+
+        self.eye_r, self.eye_g, self.eye_b = r, g, b
+        print(f"DEBUG: Stored eye_r={self.eye_r}, eye_g={self.eye_g}, eye_b={self.eye_b}")
+
+        # Protocol for command 0x11 (Set LEDs) from docs/meccanoid_protocol.md:
+        # Byte 0: 0x11 (Command ID)
+        # Byte 1: Chest LED 1 (0=Off, 1=On) - Corresponds to self.chest_led_status[0]
+        # Byte 2: Chest LED 2 (0=Off, 1=On) - Corresponds to self.chest_led_status[1]
+        # Byte 3: (Eye G << 3) | Eye R       - Eye Green (3 bits) and Red (3 bits)
+        # Byte 4: Eye B                       - Eye Blue (3 bits)
+        # Byte 5: Chest LED 3 (0=Off, 1=On) - Corresponds to self.chest_led_status[2]
+        # Byte 6: Chest LED 4 (0=Off, 1=On) - Corresponds to self.chest_led_status[3]
+        # Byte 7-17: 0x00 (Reserved/Padding)
+
+        r_val = self.eye_r & 0x07  # Ensure 0-7
+        g_val = self.eye_g & 0x07  # Ensure 0-7
+        b_val = self.eye_b & 0x07  # Ensure 0-7
+
+        eye_byte_rg = (g_val << 3) | r_val
+        eye_byte_b = b_val
+        
+        print(f"DEBUG: r_val={r_val}, g_val={g_val}, b_val={b_val}")
+        print(f"DEBUG: Calculated eye_byte_rg: {eye_byte_rg} ({bin(eye_byte_rg)}) for payload index 3")
+        print(f"DEBUG: Calculated eye_byte_b: {eye_byte_b} ({bin(eye_byte_b)}) for payload index 4")
+        
+        # Initialize payload with all zeros
+        payload = [0x00] * 18
+        
+        # Set command ID
+        payload[0] = 0x11
+        
+        # Set chest LED statuses (ensure they are 0 or 1)
+        # self.chest_led_status should be [LED1_status, LED2_status, LED3_status, LED4_status]
+        print(f"DEBUG: Current self.chest_led_status: {self.chest_led_status}")
+        payload[1] = self.chest_led_status[0] & 0x01 # Chest LED 1
+        payload[2] = self.chest_led_status[1] & 0x01 # Chest LED 2
+        payload[5] = self.chest_led_status[2] & 0x01 # Chest LED 3
+        payload[6] = self.chest_led_status[3] & 0x01 # Chest LED 4
+        
+        # Set eye color bytes
+        payload[3] = eye_byte_rg
+        payload[4] = eye_byte_b
+        
+        # Bytes 7-17 are already 0x00 from initialization
+        
+        print(f"INFO: Setting eye color to R:{r} G:{g} B:{b} and updating chest LEDs.")
+        print(f"DEBUG: Final payload for command 0x11: {payload}")
+        
+        success = await self.send_command(payload)
+        if not success:
+            print(f"ERROR: Failed to set eye color R:{r} G:{g} B:{b} after attempting send_command.")
+        return success
 
     async def set_servo_led_color(self, servo_index, color_code, mode=None):
         """
@@ -226,13 +355,11 @@ class RobotControl:
         
         self.servo_led_colors[servo_index] = color_code
         if mode is not None:
-            if not (0 <= mode <= 255): # Mode is a byte
+            if not (0 <= mode <= 255):
                  print(f"Invalid servo LED mode: {mode}. Must be 0-255.")
                  return False
             self.servo_led_modes[servo_index] = mode
             
-        # Payload: [0x0C, SL0_color...SL7_color, M0_mode...M7_mode, LastByte]
-        # LastByte is 0x00 from pymecca example
         payload = [0x0C] + self.servo_led_colors + self.servo_led_modes + [0x00]
         
         print(f"Setting servo {servo_index} LED to color {color_code}, mode {self.servo_led_modes[servo_index]}. Full LED payload: {payload}")
@@ -273,12 +400,10 @@ class RobotControl:
             
         self.chest_led_status[led_index] = status
         
-        # Payload: [0x1C, L0_status, L1_status, L2_status, L3_status, 0x00 ... 0x00] (18 bytes)
         payload = [0x00] * 18
         payload[0] = 0x1C
         for i in range(4):
             payload[i+1] = self.chest_led_status[i]
-        # Remaining bytes (5-17) are 0x00
         
         print(f"Setting chest LED {led_index} to status {status}. Full chest LED payload: {payload}")
         return await self.send_command(payload)
@@ -301,69 +426,32 @@ async def main():
             print("Connected. Initializing robot...")
             if not await robot.initialize_robot():
                 print("Failed to send handshake.")
-                return # Don't proceed if handshake fails
-            await asyncio.sleep(1) # Give time for handshake to be processed
-
-            print("\n--- Testing Eye Color ---")
-            await robot.set_eye_color(r=7, g=0, b=0) # Red
-            await asyncio.sleep(2)
-            await robot.set_eye_color(r=0, g=7, b=0) # Green
-            await asyncio.sleep(2)
-            await robot.set_eye_color(r=0, g=0, b=7) # Blue
-            await asyncio.sleep(2)
-            await robot.set_eye_color(r=0, g=0, b=0) # Off
+                return
             await asyncio.sleep(1)
 
-            print("\n--- Testing Chest LEDs ---")
-            # await robot.set_chest_led(led_index=0, status=1) # LED 0 On
-            # await asyncio.sleep(1)
-            # await robot.set_chest_led(led_index=1, status=1) # LED 1 On
-            # await asyncio.sleep(1)
-            # await robot.set_chest_led(led_index=0, status=0) # LED 0 Off
-            # await asyncio.sleep(1)
-            # await robot.set_chest_led(led_index=1, status=0) # LED 1 Off
-            # await asyncio.sleep(1)
+            print("\n--- Testing Eye Color ---")
+            await robot.set_eye_color(r=7, g=0, b=0)
+            await asyncio.sleep(2)
+            await robot.set_eye_color(r=0, g=7, b=0)
+            await asyncio.sleep(2)
+            await robot.set_eye_color(r=0, g=0, b=7)
+            await asyncio.sleep(2)
+            await robot.set_eye_color(r=0, g=0, b=0)
+            await asyncio.sleep(1)
 
-            print("\n--- Testing Servo LED Color ---")
-            # # Servo LED Colors: 0=Off, 1=R, 2=G, 3=Y, 4=B, 5=M, 6=C, 7=W
-            # await robot.set_servo_led_color(servo_index=0, color_code=1) # Servo 0 LED Red
-            # await asyncio.sleep(1)
-            # await robot.set_servo_led_color(servo_index=2, color_code=4) # Servo 2 LED Blue
-            # await asyncio.sleep(1)
-            # await robot.set_servo_led_color(servo_index=0, color_code=0) # Servo 0 LED Off
-            # await asyncio.sleep(1)
-            # await robot.set_servo_led_color(servo_index=2, color_code=0) # Servo 2 LED Off
-            # await asyncio.sleep(1)
-
-            print("\n--- Testing Servo Control ---")
-            # print("Centering all servos initially (using default state)...")
-            # # This will send the default center positions [0x80]*8
-            # # and default LED modes [0x04]*8
-            # initial_servo_payload = [0x08] + robot.servo_positions + robot.servo_led_modes + [robot.foot_leds_byte]
-            # await robot.send_command(initial_servo_payload)
-            # await asyncio.sleep(2)
-
-            # print("Moving Servo 0 (e.g., an arm servo) to 90 degrees (approx 0x40) and back to center (0x80)")
-            # await robot.set_servo_position(servo_index=0, position=0x40) # Move to 0x40
-            # await asyncio.sleep(2)
-            # await robot.set_servo_position(servo_index=0, position=0xC0) # Move to 0xC0
-            # await asyncio.sleep(2)
-            # await robot.set_servo_position(servo_index=0, position=0x80) # Back to center
-            # await asyncio.sleep(2)
-            
-            # print("Moving Servo 1 (e.g., RIGHT_ELBOW, reversed) to 90 degrees (approx 0x40) and back to center (0x80)")
-            # # For reversed servo 1, to get to an effective 0x40, we send 0xFF - 0x40 = 0xBF
-            # # To get to an effective 0xC0, we send 0xFF - 0xC0 = 0x3F
-            # await robot.set_servo_position(servo_index=1, position=0x40) # Effective 0x40 (sends 0xBF)
-            # await asyncio.sleep(2)
-            # await robot.set_servo_position(servo_index=1, position=0xC0) # Effective 0xC0 (sends 0x3F)
-            # await asyncio.sleep(2)
-            # await robot.set_servo_position(servo_index=1, position=0x80) # Back to center (sends 0x80)
-            # await asyncio.sleep(2)
+            print("\n--- Testing Poses ---")
+            await robot.execute_pose("T_Pose")
+            await asyncio.sleep(2)
+            await robot.execute_pose("Arms_Up")
+            await asyncio.sleep(2)
+            await robot.execute_pose("Surrender")
+            await asyncio.sleep(2)
+            await robot.execute_pose("Hug_Open")
+            await asyncio.sleep(2)
+            await robot.execute_pose("Hug_Close")
+            await asyncio.sleep(2)
 
             print("\n--- Example commands finished ---")
-            print("Uncomment the test commands in main() to try them with your robot.")
-            print("Ensure servo indices and positions are safe for your robot's build.")
 
     except Exception as e:
         print(f"An error occurred in main: {e}")

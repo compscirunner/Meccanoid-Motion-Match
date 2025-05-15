@@ -1,0 +1,193 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meccanoid Eye Color Test Report - 20250512_155434</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f0f2f5; color: #333; }
+        .container { background-color: #ffffff; padding: 25px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 900px; margin: auto; }
+        h1 { color: #1d3557; text-align: center; }
+        h2 { color: #457b9d; }
+        .test-case { 
+            border: 1px solid #d1d1d1; margin-bottom: 25px; padding: 20px; 
+            border-radius: 8px; background-color: #fdfdfd; 
+            transition: box-shadow 0.3s ease;
+        }
+        .test-case:hover { box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .test-case img { 
+            max-width: 100%; height: auto; display: block; margin: 15px auto;
+            border: 2px solid #e0e0e0; border-radius: 5px; 
+        }
+        .test-case h3 { margin-top: 0; font-size: 1.3em; color: #1d3557; }
+        .test-case p { margin-bottom: 5px; }
+        .controls label { margin-right: 20px; font-weight: 500; cursor: pointer; }
+        .controls input[type="radio"] { margin-right: 7px; vertical-align: middle; }
+        button#saveResultsBtn {
+            background-color: #2a9d8f; color: white; padding: 12px 20px;
+            border: none; border-radius: 5px; cursor: pointer; font-size: 1.05em; 
+            display: block; margin: 30px auto 10px auto; transition: background-color 0.3s ease;
+        }
+        button#saveResultsBtn:hover { background-color: #21867a; }
+        .filename { font-family: "Courier New", Courier, monospace; font-size: 0.95em; color: #588157; background-color: #f0f0f0; padding: 2px 5px; border-radius:3px;}
+        .ai-prediction { font-weight: bold; }
+        .ai-pass { color: green; }
+        .ai-fail { color: red; }
+        .ai-error { color: orange; }
+        p { line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Meccanoid Eye Color Test Report</h1>
+        <p><strong>Test Run ID:</strong> 20250512_155434</p>
+        <p>Please review each image below. For each test case, select "Pass" if the robot's eye color in the image matches the expected color, or "Fail" otherwise. Once all images are reviewed, click the "Save Results as CSV" button to download a summary of your assessment.</p>
+
+        <div id="test-cases-container">
+
+            <div class="test-case" id="case-0">
+                <h3>Test Case: Red</h3>
+                <p>Image File: <span class="filename">eye_test_red_20250512_155434.png</span></p>
+                <p>Expected Color: Red</p>
+                <p>AI Predicted Color: <span class="ai-prediction ai-fail">Pink</span></p>
+                <img src="eye_test_red_20250512_155434.png" alt="Test image for red">
+                <div class="controls">
+                    <label><input type="radio" name="status-0" value="Pass"> Pass</label>
+                    <label><input type="radio" name="status-0" value="Fail"> Fail</label>
+                    <label><input type="radio" name="status-0" value="Not Checked" checked> Not Checked</label>
+                </div>
+            </div>
+
+            <div class="test-case" id="case-1">
+                <h3>Test Case: Green</h3>
+                <p>Image File: <span class="filename">eye_test_green_20250512_155434.png</span></p>
+                <p>Expected Color: Green</p>
+                <p>AI Predicted Color: <span class="ai-prediction ai-pass">Green</span></p>
+                <img src="eye_test_green_20250512_155434.png" alt="Test image for green">
+                <div class="controls">
+                    <label><input type="radio" name="status-1" value="Pass"> Pass</label>
+                    <label><input type="radio" name="status-1" value="Fail"> Fail</label>
+                    <label><input type="radio" name="status-1" value="Not Checked" checked> Not Checked</label>
+                </div>
+            </div>
+
+            <div class="test-case" id="case-2">
+                <h3>Test Case: Blue</h3>
+                <p>Image File: <span class="filename">eye_test_blue_20250512_155434.png</span></p>
+                <p>Expected Color: Blue</p>
+                <p>AI Predicted Color: <span class="ai-prediction ai-pass">Blue</span></p>
+                <img src="eye_test_blue_20250512_155434.png" alt="Test image for blue">
+                <div class="controls">
+                    <label><input type="radio" name="status-2" value="Pass"> Pass</label>
+                    <label><input type="radio" name="status-2" value="Fail"> Fail</label>
+                    <label><input type="radio" name="status-2" value="Not Checked" checked> Not Checked</label>
+                </div>
+            </div>
+
+            <div class="test-case" id="case-3">
+                <h3>Test Case: Yellow</h3>
+                <p>Image File: <span class="filename">eye_test_yellow_20250512_155434.png</span></p>
+                <p>Expected Color: Yellow</p>
+                <p>AI Predicted Color: <span class="ai-prediction ai-fail">White</span></p>
+                <img src="eye_test_yellow_20250512_155434.png" alt="Test image for yellow">
+                <div class="controls">
+                    <label><input type="radio" name="status-3" value="Pass"> Pass</label>
+                    <label><input type="radio" name="status-3" value="Fail"> Fail</label>
+                    <label><input type="radio" name="status-3" value="Not Checked" checked> Not Checked</label>
+                </div>
+            </div>
+
+            <div class="test-case" id="case-4">
+                <h3>Test Case: Cyan</h3>
+                <p>Image File: <span class="filename">eye_test_cyan_20250512_155434.png</span></p>
+                <p>Expected Color: Cyan</p>
+                <p>AI Predicted Color: <span class="ai-prediction ai-pass">Cyan</span></p>
+                <img src="eye_test_cyan_20250512_155434.png" alt="Test image for cyan">
+                <div class="controls">
+                    <label><input type="radio" name="status-4" value="Pass"> Pass</label>
+                    <label><input type="radio" name="status-4" value="Fail"> Fail</label>
+                    <label><input type="radio" name="status-4" value="Not Checked" checked> Not Checked</label>
+                </div>
+            </div>
+
+            <div class="test-case" id="case-5">
+                <h3>Test Case: Magenta</h3>
+                <p>Image File: <span class="filename">eye_test_magenta_20250512_155434.png</span></p>
+                <p>Expected Color: Magenta</p>
+                <p>AI Predicted Color: <span class="ai-prediction ai-pass">Magenta</span></p>
+                <img src="eye_test_magenta_20250512_155434.png" alt="Test image for magenta">
+                <div class="controls">
+                    <label><input type="radio" name="status-5" value="Pass"> Pass</label>
+                    <label><input type="radio" name="status-5" value="Fail"> Fail</label>
+                    <label><input type="radio" name="status-5" value="Not Checked" checked> Not Checked</label>
+                </div>
+            </div>
+
+            <div class="test-case" id="case-6">
+                <h3>Test Case: White</h3>
+                <p>Image File: <span class="filename">eye_test_white_20250512_155434.png</span></p>
+                <p>Expected Color: White</p>
+                <p>AI Predicted Color: <span class="ai-prediction ai-fail">Cyan</span></p>
+                <img src="eye_test_white_20250512_155434.png" alt="Test image for white">
+                <div class="controls">
+                    <label><input type="radio" name="status-6" value="Pass"> Pass</label>
+                    <label><input type="radio" name="status-6" value="Fail"> Fail</label>
+                    <label><input type="radio" name="status-6" value="Not Checked" checked> Not Checked</label>
+                </div>
+            </div>
+
+            <div class="test-case" id="case-7">
+                <h3>Test Case: Off</h3>
+                <p>Image File: <span class="filename">eye_test_off_20250512_155434.png</span></p>
+                <p>Expected Color: Off</p>
+                <p>AI Predicted Color: <span class="ai-prediction ai-fail">Yellow</span></p>
+                <img src="eye_test_off_20250512_155434.png" alt="Test image for off">
+                <div class="controls">
+                    <label><input type="radio" name="status-7" value="Pass"> Pass</label>
+                    <label><input type="radio" name="status-7" value="Fail"> Fail</label>
+                    <label><input type="radio" name="status-7" value="Not Checked" checked> Not Checked</label>
+                </div>
+            </div>
+
+        </div>
+        <button id="saveResultsBtn" onclick="saveResults()">Save Results as CSV</button>
+    </div>
+
+    <script>
+        function saveResults() {
+            const results = [];
+            const headers = ["ImageFile", "ExpectedColor", "AIPredictedColor", "ManualStatus"];
+            results.push(headers.join(','));
+
+            const testCases = document.querySelectorAll('.test-case');
+            testCases.forEach((tc, index) => {
+                const imgFilename = tc.querySelector('.filename').textContent;
+                const expectedColor = tc.querySelector('h3').textContent.replace('Test Case: ', '').toLowerCase();
+                const aiPredictionElement = tc.querySelector('.ai-prediction');
+                const aiPredictedColor = aiPredictionElement ? aiPredictionElement.textContent.toLowerCase() : 'N/A';
+                const statusInput = tc.querySelector('input[name="status-' + index + '"]:checked');
+                const status = statusInput ? statusInput.value : 'Not Checked';
+                results.push([imgFilename, expectedColor, aiPredictedColor, status].map(val => `"${val.replace(/"/g, '""')}"`).join(','));
+            });
+
+            const csvContent = results.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", "test_summary_20250512_155434.csv");
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            } else {
+                alert("Your browser does not support automatic downloads. CSV content will be logged to console.");
+                console.log("CSV Content:\n" + csvContent);
+            }
+        }
+    </script>
+</body>
+</html>

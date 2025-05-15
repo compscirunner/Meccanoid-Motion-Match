@@ -17,6 +17,8 @@ import numpy as np # For sound generation
 import pygame # For sound playback
 
 from src.robot_control import RobotControl # Import from src package
+# Add import for the new Home Assistant control module
+from tests.utils.home_assistant_control import set_robot_power
 
 # IMPORTANT: Verify this is your Meccanoid's MAC address
 MECCANOID_DEVICE_ADDRESS = "5C:F8:21:EF:ED:D1"
@@ -245,6 +247,40 @@ def generate_html_report(image_details, output_dir, test_run_timestamp):
 
 async def run_eye_color_test():
     initialize_sounds() # Create sound objects
+
+    # --- Robot Power Cycle using Home Assistant ---
+    # Note: This sequence attempts to power cycle the robot before tests.
+    # Adjust sleep durations based on your robot's actual power-off and boot-up times.
+    # Consider if this should be part of a broader test suite setup (e.g., pytest fixture)
+    # if running multiple test scripts or if power cycling is needed less frequently.
+    print("\n--- Attempting Robot Power Cycle via Home Assistant ---")
+    loop = asyncio.get_running_loop()
+
+    # 1. Turn Robot OFF
+    print("Attempting to turn robot OFF...")
+    power_off_successful = await loop.run_in_executor(None, set_robot_power, "off")
+    if power_off_successful:
+        print("Robot power OFF command successful. Waiting 5 seconds for full power down...")
+        await asyncio.sleep(5) # Duration for robot to power down
+    else:
+        print("Warning: Failed to turn robot power OFF. Test may be unreliable.")
+        # Decide if you want to abort here, e.g., return or raise an exception
+
+    # 2. Turn Robot ON
+    print("Attempting to turn robot ON...")
+    power_on_successful = await loop.run_in_executor(None, set_robot_power, "on")
+    if power_on_successful:
+        # Critical: Adjust this sleep duration based on your Meccanoid's boot time.
+        # It needs enough time to fully initialize before Bluetooth connection attempts.
+        robot_boot_time_seconds = 20 
+        print(f"Robot power ON command successful. Waiting {robot_boot_time_seconds} seconds for robot to boot...")
+        await asyncio.sleep(robot_boot_time_seconds) 
+    else:
+        print("Warning: Failed to turn robot power ON. Test may be unreliable or fail to connect.")
+        # Decide if you want to abort here
+
+    print("--- Robot Power Cycle Attempt Finished ---")
+    # --- End of Robot Power Cycle ---
 
     timestamp_run = datetime.now().strftime("%Y%m%d_%H%M%S")
     current_test_run_dir = os.path.join(BASE_OUTPUT_DIR, timestamp_run)

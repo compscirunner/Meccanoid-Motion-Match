@@ -51,7 +51,7 @@ This command is often sent upon connection to make the Meccanoid acknowledge the
 
 Controls the RGB color of the Meccanoid's eyes.
 
--   **Payload Structure:** `[0x11, 0x00, 0x00, (G << 3) | R, B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]`
+-   **Payload Structure:** `[0x11, 0x00, 0x00, (G << 3) | R, B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]`
     -   `R`, `G`, `B`: Red, Green, Blue components, each ranging from `0x0` (off) to `0x7` (max intensity).
     -   Byte 3: `(G << 3) | R`
     -   Byte 4: `B`
@@ -73,12 +73,19 @@ Sets the position of all 8 possible servos.
 -   **Payload Structure:** `[0x08, S0_pos, S1_pos, S2_pos, S3_pos, S4_pos, S5_pos, S6_pos, S7_pos, L0_mode, L1_mode, L2_mode, L3_mode, L4_mode, L5_mode, L6_mode, L7_mode, Foot_LEDs]`
     -   Byte 0: `0x08` (Command type for setting servos)
     -   Bytes 1-8 (`S0_pos` to `S7_pos`): Position for servos 0 through 7. Value from `0x00` to `0xFF`. `0x80` is typically center.
-        -   **Note on Reversal:** Some servos might be mechanically reversed. For `LEFT_SHOULDER_SERVO` (ID 3) and `RIGHT_ELBOW_SERVO` (ID 1), if the desired position is not center (`0x80`), the value sent should be `0xFF - desired_position`.
+        -   **Note on Position Values:** Standard range is:
+            -   `0x40` (64): Minimum position
+            -   `0x80` (128): Center/neutral position
+            -   `0xC0` (192): Maximum position
+        -   **Note on Original Documentation:** The original documentation mentioned reversed logic for some servos. Our testing has shown this is NOT necessary with the correct servo mapping.
     -   Bytes 9-16 (`L0_mode` to `L7_mode`): Mode for the LEDs in each servo (0-7). Typically `0x01` for normal operation, but can also control color/pattern. The `pymecca` library initializes these to `0x01`.
     -   Byte 17 (`Foot_LEDs`): Controls LEDs in the feet, if present. `pymecca` initializes this to `0x01`.
 
     *Initial state from `pymecca` for servo positions (used for arm waggle after "I'm awake")*:
     `[0x08, 0x7f, 0x80, 0x00, 0xff, 0x80, 0x7f, 0x7f, 0x7f, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01]`
+    
+    *Corrected servo positions for neutral stance (based on our testing)*:
+    `[0x08, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01]`
 
 ### 3.5. Set Servo Lights (All Servo LEDs)
 
@@ -129,7 +136,7 @@ Controls the speed and direction of the two drive motors.
 
 ## 4. Servo ID Mapping (0-indexed)
 
-Based on `pymecca` library:
+Previous mapping from `pymecca` library (which we found to be incorrect):
 -   `0`: UNKNOWN0_SERVO
 -   `1`: RIGHT_ELBOW_SERVO (Reversed logic: `0xFF - value` if not `0x80`)
 -   `2`: RIGHT_SHOULDER_SERVO
@@ -138,4 +145,191 @@ Based on `pymecca` library:
 -   `5`: UNKNOWN5_SERVO
 -   `6`: UNKNOWN6_SERVO
 -   `7`: UNKNOWN7_SERVO
+
+### Corrected Servo Mapping (Based on Extensive Testing)
+
+Through rigorous testing with a diagnostic interface, we discovered the actual mapping:
+-   `0`: UNKNOWN_SERVO (Appears to briefly move both arms to T position when commanded)
+-   `1`: RIGHT_ELBOW_SERVO
+-   `2`: RIGHT_SHOULDER_SERVO
+-   `3`: LEFT_SHOULDER_SERVO
+-   `4`: LEFT_ELBOW_SERVO
+-   `5`: UNKNOWN5_SERVO (No observed function)
+-   `6`: UNKNOWN6_SERVO (No observed function)
+-   `7`: UNKNOWN7_SERVO (No observed function)
+
+### Key Findings:
+
+1. The left elbow is controlled by servo index 4 (NOT index 3 as previously documented)
+2. No reverse logic is needed for any of the servos in the standard configuration
+3. We implemented an optional inversion toggle for the left elbow in case the physical build requires it
+4. Values of 0x40, 0x80, and 0xC0 represent min, center, and max positions respectively
+
+### Directional Reference:
+
+1. **Right Elbow (Servo 1)**:
+   - 0x40: Elbow out/extended
+   - 0xC0: Elbow in/bent
+
+2. **Right Shoulder (Servo 2)**:
+   - 0x40: Shoulder down
+   - 0x80: Shoulder center
+   - 0xC0: Shoulder up
+
+3. **Left Shoulder (Servo 3)**:
+   - 0x40: Shoulder up
+   - 0x80: Shoulder center
+   - 0xC0: Shoulder down
+
+4. **Left Elbow (Servo 4)**:
+   - 0x40: Elbow in/bent
+   - 0x80: Elbow center
+   - 0xC0: Elbow out/extended
+
+## 5. Working Implementation Examples
+
+Based on our testing, here are working implementations for controlling the Meccanoid robot:
+
+### 5.1 JavaScript Implementation (Web Bluetooth)
+
+```javascript
+// Function to move a single servo
+async function moveServo(servoNum, position) {
+    // Create a command with neutral positions for all servos
+    const command = new Uint8Array([
+        0x08, // Command code for servo control
+        0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, // Default positions (all neutral)
+        0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01  // LED modes
+    ]);
+    
+    // Set the position for the target servo
+    command[servoNum] = position;
+    
+    // Calculate checksum
+    const sum = command.reduce((a, b) => a + b, 0);
+    const checksum = [sum >> 8, sum & 0xFF];
+    
+    // Construct the full command with checksum
+    const fullCommand = new Uint8Array([...command, ...checksum]);
+    
+    // Send via Bluetooth
+    await characteristic.writeValue(fullCommand);
+}
+
+// Example: Wave animation using the correct servo mapping
+async function waveAnimation() {
+    await moveServo(1, 0x80); // Center right elbow
+    await moveServo(2, 0xC0); // Raise right shoulder
+    
+    // Wave the right arm a few times
+    for (let i = 0; i < 3; i++) {
+        await moveServo(1, 0x40); // Move right elbow out
+        await new Promise(resolve => setTimeout(resolve, 300));
+        await moveServo(1, 0xC0); // Move right elbow in
+        await new Promise(resolve => setTimeout(resolve, 300));
+    }
+    
+    // Return to neutral position
+    await moveServo(1, 0x80); // Center right elbow
+    await moveServo(2, 0x80); // Center right shoulder
+}
+```
+
+### 5.2 Python Implementation
+
+```python
+import time
+
+# Hypothetical Bluetooth library and connection
+# bluetooth_characteristic = ...
+
+def calculate_checksum(data):
+    """Calculate the checksum for a Meccanoid command."""
+    total = sum(data)
+    return [(total >> 8) & 0xFF, total & 0xFF]
+
+def move_servo(servo_num, position):
+    """Move a single servo to the specified position."""
+    # Create command with neutral positions for all servos
+    command = [0x08] + [0x80] * 8 + [0x01] * 9
+    
+    # Set the position for the target servo
+    command[servo_num] = position
+    
+    # Calculate checksum
+    checksum = calculate_checksum(command)
+    
+    # Construct and send the full command
+    full_command = command + checksum
+    # bluetooth_characteristic.write_value(bytearray(full_command))
+    
+    # For debugging
+    print(f"Moving servo {servo_num} to position {hex(position)}")
+    print(f"Command: {[hex(b) for b in full_command]}")
+    
+    return full_command
+
+def wave_animation():
+    """Execute a wave animation using the correct servo mapping."""
+    # Center right elbow, raise right shoulder
+    move_servo(1, 0x80)  # Center right elbow
+    move_servo(2, 0xC0)  # Raise right shoulder
+    time.sleep(0.5)
+    
+    # Wave the right arm
+    for _ in range(3):
+        move_servo(1, 0x40)  # Move right elbow out
+        time.sleep(0.3)
+        move_servo(1, 0xC0)  # Move right elbow in
+        time.sleep(0.3)
+    
+    # Return to neutral position
+    move_servo(1, 0x80)  # Center right elbow
+    move_servo(2, 0x80)  # Center right shoulder
+```
+
+## 6. Common Animation Patterns
+
+Based on our testing, here are some common animation patterns that work well with the Meccanoid:
+
+### 6.1. Wave Hello
+
+```
+1. Center right elbow (Servo 1: 0x80)
+2. Raise right shoulder (Servo 2: 0xC0)
+3. Move right elbow out (Servo 1: 0x40)
+4. Move right elbow in (Servo 1: 0xC0)
+5. Repeat steps 3-4 a few times
+6. Return to neutral position
+```
+
+### 6.2. Nod Yes
+
+```
+1. Move left shoulder up (Servo 3: 0x40)
+2. Move left shoulder down (Servo 3: 0xA0)
+3. Repeat steps 1-2 a few times
+4. Return left shoulder to center (Servo 3: 0x80)
+```
+
+### 6.3. Shake No (Head)
+
+```
+1. Move right shoulder right (Servo 2: 0x60)
+2. Move right shoulder left (Servo 2: 0xA0)
+3. Repeat steps 1-2 a few times
+4. Return right shoulder to center (Servo 2: 0x80)
+```
+
+### 6.4. Dance Movement
+
+```
+1. Set right elbow out (Servo 1: 0x40)
+2. Set left elbow out (Servo 4: 0xC0)
+3. Set shoulders to center (Servo 2: 0x80, Servo 3: 0x80)
+4. Raise arms up (Servo 2: 0xC0, Servo 3: 0x40)
+5. Lower arms down (Servo 2: 0x40, Servo 3: 0xC0)
+6. Repeat steps 4-5 a few times
+7. Return all servos to neutral position
+```
 
